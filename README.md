@@ -1,8 +1,21 @@
 # Socket_Programming-GUI
 socket.h&amp;gtk3-Network_GUI_Project
+
+
+
 STILL ON PROGRESS
 
+
+
+
 ---NOT RELİABLE VERSION, DO NOT TRUST
+
+
+
+
 ---NOT OPTİMİZED, CAN CAUSE THREAD PROBLEMS
+
+
+
 
 KNOWN ISSUES = CONNECTİON DİSCONNECT AUTOMATICALLY
