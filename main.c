@@ -59,6 +59,7 @@ void *recvThread(void *vargp)
                     }
                 
             }
+        printf("recvThread is going to be closed\n");
         pthread_exit(recvThread);
         printf("recvThread is broken\n");
     }
@@ -76,6 +77,7 @@ void *sendThread(void *vargp)
                         perror("Send Failed");
                     }
             } 
+        printf("sendThread is going to be closed\n");
         pthread_exit(sendThread);
         printf("sendThread is broken\n");
     }
@@ -136,20 +138,24 @@ void *connectionThread(void *vargp)
                 if(getsockopt(clientSocket, SOL_SOCKET, SO_ERROR, &connectionStatus, &conlen))
                     {
                         perror("Connection is Corrupted");
-                        cCleaner(clientSocket);
+                        cConnection = 0;
                     }
                 
             }
+        if(!cCleaner(clientSocket))
+            {
+                printf("Cleaning's Requested\n");
+            }
+        printf("connectionThread is going to be closed\n");
+        pthread_exit(connectionThread);
+        printf("connectionThread is Broken\n");
     }
 //Button Events
 void cOrderWindowCloser(GtkWidget *widget, gpointer data)
     {
         //gtk_window_close(GTK_WINDOW(cOrderWindow));
         gtk_widget_destroy(GTK_WIDGET(cOrderWindow));
-        if(!cCleaner(clientSocket))
-            {
-                printf("Cleaned Well\n");
-            }
+        cConnection = 0;
             
     }
 void btConnectClick(GtkWidget *widget, gpointer data)
@@ -322,19 +328,23 @@ int connectToServer(char ipAddress[], char portNumber[])
     }
 int socketCloser(int aloneSocket)
     {
-        if(0>close(aloneSocket))
+        if(0!=close(aloneSocket))
             {
                 perror("Socket Closing Error");
                 return -1;
             }
-        return 0;
+        else
+            {
+                printf("Socket is Closed\n");
+                return 0; 
+            }
+        
     }
 int cCleaner(int aloneSocket)
     {
         cConnection = 0;
         cRecv = 0;
         cSend = 0;
-        printf("cRecv is = %d, cSend is = %d\n",cRecv, cSend);
         socketCloser(aloneSocket);
         gtk_widget_show(cWindow);
         gtk_widget_set_sensitive(GTK_WIDGET(btConnect), TRUE);
