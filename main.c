@@ -10,15 +10,17 @@
 #include <unistd.h>
 #include <errno.h>
 #include <pthread.h>
+//Global Variables
+int cSendLength;
+int cRecvLength;
+int cRecv;
+
+
 //Thread Values
-int cConnection = !0;
-int cRecv = !0;
-int cSend = !0;
-pthread_t connectionThreadID;
-pthread_t recvThreadID;
-pthread_t sendThreadID;
-int connectionStatus;
-socklen_t conlen = sizeof(connectionStatus);
+
+
+
+
 //Client Window Decleration
         GtkWidget *cWindow;
         GtkWidget *cPane;
@@ -33,136 +35,77 @@ socklen_t conlen = sizeof(connectionStatus);
         GtkWidget *cOrderSendScrollableWindow;
         GtkWidget *cOrderRecvTextView;
         GtkWidget *cOrderSendTextView;
+        GtkWidget *btcOrderMessageSend;
 //Socket Decleration
         int clientSocket;
 
 //Funcs
-int connectToServer(char ipAddress[], char portNumber[]);
+int connectToServer(void);
 int socketCloser(int aloneSocket);
 int cCleaner(int aloneSocket);
+int cSendMessageF(int clientSocket, char cMessage[]);
 
 //Threads
-void *recvThread(void *vargp)
+void *cRecvThread (void *vargp)
     {
-        printf("I'm in recv thread\n");
         char recvBuffer[512];
-        while(cRecv!=0)
-            {
-                //g_print("in recv\n");
-                if(0>recv(clientSocket, recvBuffer, strlen(recvBuffer), 0))
-                    {
-                        perror("Recv Failed");
-                    }
-                else
-                    {
-                        printf("%s",recvBuffer);
-                    }
-                
-            }
-        printf("recvThread is going to be closed\n");
-        pthread_exit(recvThread);
-        printf("recvThread is broken\n");
-    }
-void *sendThread(void *vargp)
-    {
-        printf("I'm in send thread\n");
-        int exit = 0;
-        char sendBuffer[512];
-        while(cSend!=0)
-            {
-                //printf("in send\n");
-                fgets(sendBuffer, 512, stdin);
-                if(0>send(clientSocket, sendBuffer, strlen(sendBuffer), 0))
-                    {
-                        perror("Send Failed");
-                    }
-            } 
-        printf("sendThread is going to be closed\n");
-        pthread_exit(sendThread);
-        printf("sendThread is broken\n");
-    }
-void *connectionThread(void *vargp)
-    {
-        printf("I'm in Connection Thread \n");
-        char ipAddress[15];
-        char portNumber[12];
-        strncpy(ipAddress, gtk_entry_get_text(GTK_ENTRY(ipEntry)),15);
-        strncpy(portNumber, gtk_entry_get_text(GTK_ENTRY(portEntry)),12);
-        //Socket Setup
-        clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        printf("Client Socket is = %d\n", clientSocket);
-        if(0>clientSocket)
-            {   
-                printf("ERRNO = %d:%s\n", errno, strerror(errno));
-                printf("Error ID = %d\n", clientSocket);
-                perror("Socket Setup Failed");
-                socketCloser(clientSocket);
-                //return -1;
-            }
-        ipAddress[strlen(ipAddress)+1]='\0';
-        portNumber[strlen(portNumber)+1]='\0';
+        printf("cRecvThread\n");
 
-        //Connection Information //93.190.8.248
-        struct sockaddr_in server_Socket;
-        server_Socket.sin_family = AF_INET;
-        server_Socket.sin_addr.s_addr = inet_aton(ipAddress, (struct in_addr*)&server_Socket.sin_addr.s_addr);
-        server_Socket.sin_port = htons(atoi(portNumber));
-        socklen_t server_Socket_len = sizeof(server_Socket);
-        
-        if(0>inet_pton(AF_INET, ipAddress, &server_Socket.sin_addr.s_addr))
+        //GONNA FIX
+        while(cRecv)
             {
-                perror("Undefined IP Address");
-                socketCloser(clientSocket);
-                //return -1;
+                memset(recvBuffer, ' ', 511);
+                recvBuffer[512] = '\0';
+                cRecvLength = recv(clientSocket, recvBuffer, strlen(recvBuffer), 0);
+                recvBuffer[cRecvLength] = '\0';
+                g_print("%s", recvBuffer);
             }
-        printf("IP is = %s and len = [%d]\n", ipAddress, strlen(ipAddress));
-        printf("Port is = %s and len = [%d]\n", portNumber, strlen(portNumber));
-        if(0>connect(clientSocket, (struct sockaddr*)&server_Socket, server_Socket_len))
-            {
-                perror("Connection Error");
-                socketCloser(clientSocket);
-                //return -1;
-            }
-        else
-            {
-                printf("Connected\n");
-            }
-        //Multithread
-        cRecv = !0;
-        cSend = !0;
-        pthread_create(&recvThreadID, NULL, recvThread, NULL);
-        pthread_create(&sendThreadID, NULL, sendThread, NULL);
-        while(cConnection!=0)
-            {
-                //printf("%d\n",getsockopt(clientSocket, SOL_SOCKET, SO_ERROR, &connectionStatus, &conlen));
-                if(getsockopt(clientSocket, SOL_SOCKET, SO_ERROR, &connectionStatus, &conlen))
-                    {
-                        perror("Connection is Corrupted");
-                        cConnection = 0;
-                    }
-                
-            }
-        if(!cCleaner(clientSocket))
-            {
-                printf("Cleaning's Requested\n");
-            }
-        printf("connectionThread is going to be closed\n");
-        pthread_exit(connectionThread);
-        printf("connectionThread is Broken\n");
+        printf("Recv Thread will be closed\n");
+        pthread_exit(cRecvThread);
     }
+
+
+
+
+
 //Button Events
+void cOrderSendMessage(GtkWidget *widget, gpointer data)
+    {
+        GtkTextIter cSFirst, cSLast;
+        GtkTextBuffer *cOMessageSendBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(cOrderSendTextView));
+        gtk_text_buffer_get_bounds(cOMessageSendBuffer, &cSFirst, &cSLast);
+        gchar *cSendMessage;
+        cSendMessage = gtk_text_buffer_get_text(cOMessageSendBuffer, &cSFirst, &cSLast, FALSE);
+        if(cSendMessageF(clientSocket, cSendMessage))
+            {
+                perror("Send Failed");
+            }
+    }
 void cOrderWindowCloser(GtkWidget *widget, gpointer data)
     {
-        //gtk_window_close(GTK_WINDOW(cOrderWindow));
         gtk_widget_destroy(GTK_WIDGET(cOrderWindow));
-        cConnection = 0;
-            
+        cCleaner(clientSocket);
     }
 void btConnectClick(GtkWidget *widget, gpointer data)
     {
         g_print("Connection Order\n");
-        cConnection = !0;
-        pthread_create(&connectionThreadID, NULL, connectionThread, NULL);
+
+        //Connection Call
+        if(!connectToServer())
+            {
+                printf("Threading's Starting\n");
+                //Multithread
+                cRecv = 1;
+                pthread_t cRecvThreadID;
+                pthread_create(&cRecvThreadID, NULL, cRecvThread, NULL);
+
+            }
+        else
+            {
+                perror("Connection Failed\n");
+                cCleaner(clientSocket);
+            }
+
 
         //Chat Window Definition
         cOrderWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -171,11 +114,12 @@ void btConnectClick(GtkWidget *widget, gpointer data)
         cOrderSendScrollableWindow = gtk_scrolled_window_new(NULL, NULL);
         cOrderRecvTextView = gtk_text_view_new();
         cOrderSendTextView = gtk_text_view_new();
+        btcOrderMessageSend = gtk_button_new_with_label("Send");
 
         //Customization
             //Window
         gtk_window_set_position(GTK_WINDOW(cOrderWindow), GTK_WIN_POS_CENTER);
-        gtk_window_set_default_size(GTK_WINDOW(cOrderWindow), 400, 600);
+        gtk_window_set_default_size(GTK_WINDOW(cOrderWindow), 400, 700);
         gtk_window_set_title(GTK_WINDOW(cOrderWindow), "Tahinli's Client");
         gtk_window_set_resizable(GTK_WINDOW(cOrderWindow), FALSE);
             //TextView
@@ -185,7 +129,10 @@ void btConnectClick(GtkWidget *widget, gpointer data)
         //Pane Set
         gtk_fixed_put(GTK_FIXED(cOrderPane), cOrderRecvScrollableWindow, 10, 10);
         gtk_fixed_put(GTK_FIXED(cOrderPane), cOrderSendScrollableWindow, 10, 400);
+        gtk_fixed_put(GTK_FIXED(cOrderPane), btcOrderMessageSend, 10, 600);
 
+        //Button-Event
+        g_signal_connect(btcOrderMessageSend, "clicked", G_CALLBACK(cOrderSendMessage), NULL);
 
         //Epilogue
         gtk_container_add(GTK_CONTAINER(cOrderRecvScrollableWindow), cOrderRecvTextView);
@@ -322,8 +269,52 @@ int main(int argc, char **argv)
     }
 
 
-int connectToServer(char ipAddress[], char portNumber[])
+int connectToServer(void)
     {
+        char ipAddress[15];
+        char portNumber[12];
+        strncpy(ipAddress, gtk_entry_get_text(GTK_ENTRY(ipEntry)),15);
+        strncpy(portNumber, gtk_entry_get_text(GTK_ENTRY(portEntry)),12);
+        //Socket Setup
+        clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        printf("Client Socket is = %d\n", clientSocket);
+        if(0>clientSocket)
+            {   
+                printf("ERRNO = %d:%s\n", errno, strerror(errno));
+                printf("Error ID = %d\n", clientSocket);
+                perror("Socket Setup Failed");
+                socketCloser(clientSocket);
+                return -1;
+            }
+        ipAddress[strlen(ipAddress)+1]='\0';
+        portNumber[strlen(portNumber)+1]='\0';
+
+        //Connection Information //93.190.8.248
+        struct sockaddr_in server_Socket;
+        server_Socket.sin_family = AF_INET;
+        server_Socket.sin_addr.s_addr = inet_aton(ipAddress, (struct in_addr*)&server_Socket.sin_addr.s_addr);
+        server_Socket.sin_port = htons(atoi(portNumber));
+        socklen_t server_Socket_len = sizeof(server_Socket);
+        
+        if(0>inet_pton(AF_INET, ipAddress, &server_Socket.sin_addr.s_addr))
+            {
+                perror("Undefined IP Address");
+                socketCloser(clientSocket);
+                return -1;
+            }
+        printf("IP is = %s and len = [%d]\n", ipAddress, strlen(ipAddress));
+        printf("Port is = %s and len = [%d]\n", portNumber, strlen(portNumber));
+        if(0!=connect(clientSocket, (struct sockaddr*)&server_Socket, server_Socket_len))
+            {
+                perror("Connection Error");
+                socketCloser(clientSocket);
+                return -1;
+            }
+        else
+            {
+                printf("Connected\n");
+            }
+        
         return 0;
     }
 int socketCloser(int aloneSocket)
@@ -342,14 +333,33 @@ int socketCloser(int aloneSocket)
     }
 int cCleaner(int aloneSocket)
     {
-        cConnection = 0;
         cRecv = 0;
-        cSend = 0;
         socketCloser(aloneSocket);
         gtk_widget_show(cWindow);
         gtk_widget_set_sensitive(GTK_WIDGET(btConnect), TRUE);
         gtk_widget_set_sensitive(GTK_WIDGET(ipEntry), TRUE);
         gtk_widget_set_sensitive(GTK_WIDGET(portEntry), TRUE);
-        pthread_cancel(sendThreadID);
         return 0;
+    }
+int cSendMessageF(int clientSocket, char cMessage[])
+    {
+        char cSendBuffer[512];
+
+        if(strlen(cMessage)<512)
+        {   
+            strncpy(cSendBuffer, cMessage, strlen(cMessage));
+            cSendBuffer[strlen(cMessage)] = '\0';
+            cSendLength=send(clientSocket, cSendBuffer, strlen(cSendBuffer), 0);
+            if(cSendLength!=strlen(cMessage))
+            {
+                perror("Send Failed");
+                return -1;
+            }
+           return 0; 
+        }
+        else
+            {
+                printf("Too Long\n");
+                return -1;
+            }
     }
