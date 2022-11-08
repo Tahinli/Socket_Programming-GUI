@@ -50,7 +50,8 @@ void *cRecvThread (void *vargp)
     {
         char recvBuffer[512];
         printf("cRecvThread\n");
-
+        GtkTextIter cRIter;
+        GtkTextMark *cRMark;
         //GONNA FIX
         while(cRecv)
             {
@@ -58,6 +59,10 @@ void *cRecvThread (void *vargp)
                 recvBuffer[512] = '\0';
                 cRecvLength = recv(clientSocket, recvBuffer, strlen(recvBuffer), 0);
                 recvBuffer[cRecvLength] = '\0';
+                GtkTextBuffer *cOMessageRecvBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(cOrderRecvTextView));
+                cRMark = gtk_text_buffer_get_insert(cOMessageRecvBuffer);
+                gtk_text_buffer_get_iter_at_mark(cOMessageRecvBuffer, &cRIter, cRMark);
+                gtk_text_buffer_insert(cOMessageRecvBuffer, &cRIter, recvBuffer, -1);
                 g_print("%s", recvBuffer);
             }
         printf("Recv Thread will be closed\n");
@@ -119,17 +124,18 @@ void btConnectClick(GtkWidget *widget, gpointer data)
         //Customization
             //Window
         gtk_window_set_position(GTK_WINDOW(cOrderWindow), GTK_WIN_POS_CENTER);
-        gtk_window_set_default_size(GTK_WINDOW(cOrderWindow), 400, 700);
+        gtk_window_set_default_size(GTK_WINDOW(cOrderWindow), 520, 500);
         gtk_window_set_title(GTK_WINDOW(cOrderWindow), "Tahinli's Client");
         gtk_window_set_resizable(GTK_WINDOW(cOrderWindow), FALSE);
             //TextView
-        gtk_widget_set_size_request(GTK_WIDGET(cOrderRecvScrollableWindow), 300, 300);
-        gtk_widget_set_size_request(GTK_WIDGET(cOrderSendScrollableWindow), 300, 100);
+        gtk_widget_set_size_request(GTK_WIDGET(cOrderRecvScrollableWindow), 500, 300);
+        gtk_widget_set_size_request(GTK_WIDGET(cOrderSendScrollableWindow), 500, 100);
+        gtk_text_view_set_editable(GTK_TEXT_VIEW(cOrderRecvTextView), FALSE);
 
         //Pane Set
         gtk_fixed_put(GTK_FIXED(cOrderPane), cOrderRecvScrollableWindow, 10, 10);
-        gtk_fixed_put(GTK_FIXED(cOrderPane), cOrderSendScrollableWindow, 10, 400);
-        gtk_fixed_put(GTK_FIXED(cOrderPane), btcOrderMessageSend, 10, 600);
+        gtk_fixed_put(GTK_FIXED(cOrderPane), cOrderSendScrollableWindow, 10, 350);
+        gtk_fixed_put(GTK_FIXED(cOrderPane), btcOrderMessageSend, 420, 450);
 
         //Button-Event
         g_signal_connect(btcOrderMessageSend, "clicked", G_CALLBACK(cOrderSendMessage), NULL);
