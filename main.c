@@ -22,6 +22,11 @@ int cSendCheck = -1;
 pthread_mutex_t cMutex;
 
 
+//Server Window Decleration
+        GtkWidget *sWindow;
+        GtkWidget *sPane;
+        GtkWidget *btStart;
+        GtkWidget *sPortEntry;
 
 //Client Window Decleration
         GtkWidget *cWindow;
@@ -40,12 +45,14 @@ pthread_mutex_t cMutex;
         GtkWidget *btcOrderMessageSend;
 //Socket Decleration
         int clientSocket;
+        int serverSocket;
 
 //Funcs
 int connectToServer(void);
 int socketCloser(int aloneSocket);
 int cCleaner(int aloneSocket);
 int cSendMessageF(int clientSocket, char cMessage[]);
+int startServer(void);
 
 //Threads
 
@@ -112,6 +119,17 @@ gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer data);
 
 
 //Button Events
+
+void btStartClick(GtkWidget *widget, gpointer data)
+    {
+        g_print("\nServer Start Order\n");
+        if(startServer())
+            {
+                perror("Server couldn't start");
+            }
+    }
+
+
 gboolean cOrderSendMessage(GtkWidget *widget, gpointer data)
     {
         GtkTextIter cSFirst, cSLast;
@@ -269,12 +287,33 @@ void btClientClick(GtkWidget *widget, gpointer data)
 void btServerClick(GtkWidget *widget, gpointer data)
     {
         printf("Server Selected\n");
-        //Decleration
-        GtkWidget *sWindow;
-        GtkWidget *sPane;
         //Definition
         sWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
         sPane = gtk_fixed_new();
+        btStart = gtk_button_new_with_label("Start Server");
+        sPortEntry = gtk_entry_new();
+
+        //Pane-Set
+        gtk_fixed_put(GTK_FIXED(sPane), btStart, 150, 45);
+        gtk_fixed_put(GTK_FIXED(sPane), sPortEntry, 125, 10);
+
+        //Customization
+            //Window
+        gtk_window_set_position(GTK_WINDOW(sWindow), GTK_WIN_POS_CENTER);
+        gtk_window_set_default_size(GTK_WINDOW(sWindow), 400, 100);
+        gtk_window_set_title(GTK_WINDOW(sWindow), "Tahinli's Server");
+        gtk_window_set_resizable(GTK_WINDOW(sWindow), FALSE);
+            //Entry
+        gtk_entry_set_placeholder_text(GTK_ENTRY(sPortEntry), "Port Number");
+        gtk_entry_set_max_length(GTK_ENTRY(sPortEntry), 5);
+            //Button
+        gtk_widget_set_can_focus(GTK_WIDGET(btStart), TRUE);
+        gtk_widget_grab_focus(GTK_WIDGET(btStart));
+
+        //Button-Event
+        g_signal_connect(btStart,"clicked", G_CALLBACK(btStartClick), NULL);
+
+
         //Epilogue
         gtk_container_add(GTK_CONTAINER(sWindow), sPane);
         gtk_widget_show_all(sWindow);
@@ -339,7 +378,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
-
+//FUNCS
 int connectToServer(void)
     {
         char ipAddress[15];
@@ -426,7 +465,7 @@ int cSendMessageF(int clientSocket, char cMessage[])
                         if(isEmpyty == -1 && cMessage[i] != 10 && cMessage[i] != 32 && cMessage[i] != 9)
                             {
                                 isEmpyty = i;
-                                printf("BOŞ\n");
+                                printf("\nBOŞ\n");
                             }
                         if(isEmpyty != -1 && cMessage[i] != 10 && cMessage[i] != 32 && cMessage[i] != 9)
                             {
@@ -467,6 +506,31 @@ int cSendMessageF(int clientSocket, char cMessage[])
         printf("\nEverything is OK\n");
         return 0;
 
+    }
+int startServer(void)
+    {
+        printf("\nServer is Starting\n");
+        char sPortNumber[] = "00000";
+        strncpy(sPortNumber, gtk_entry_get_text(GTK_ENTRY(sPortEntry)),5);
+        sPortNumber[5] = '\n';
+        /*for(int i = 0; i<strlen(sPortNumber);i++)
+            {
+                printf("%c---%d\n", sPortNumber[i], sPortNumber[i]);
+            }*/
+
+        //Socket Setup
+        serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        printf("Server Socket is = %d\n", serverSocket);
+        if(0>serverSocket)
+            {   
+                printf("ERRNO = %d:%s\n", errno, strerror(errno));
+                printf("Error ID = %d\n", serverSocket);
+                perror("Socket Setup Failed");
+                socketCloser(serverSocket);
+                return -1;
+            }
+        
+        return 0;
     }
 
 
