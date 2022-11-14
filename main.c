@@ -14,10 +14,12 @@
 int cSendLength;
 int cRecvLength;
 int cRecv;
-
+int cRecvCommunicate;
+char recvBuffer[512];
+int cSendCheck = -1;
 
 //Thread Values
-
+pthread_mutex_t cMutex;
 
 
 
@@ -46,35 +48,71 @@ int cCleaner(int aloneSocket);
 int cSendMessageF(int clientSocket, char cMessage[]);
 
 //Threads
+
 void *cRecvThread (void *vargp)
-    {
-        char recvBuffer[512];
+    {//93.190.8.248
+        
         printf("cRecvThread\n");
         GtkTextIter cRIter;
         GtkTextMark *cRMark;
-        //GONNA FIX
+        GtkAdjustment *cRHeight;
         while(cRecv)
             {
                 memset(recvBuffer, ' ', 511);
                 recvBuffer[512] = '\0';
-                cRecvLength = recv(clientSocket, recvBuffer, strlen(recvBuffer), 0);
+                cRecvLength = recv(clientSocket, recvBuffer, strlen(recvBuffer), MSG_DONTWAIT);
                 recvBuffer[cRecvLength] = '\0';
-                GtkTextBuffer *cOMessageRecvBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(cOrderRecvTextView));
-                cRMark = gtk_text_buffer_get_insert(cOMessageRecvBuffer);
-                gtk_text_buffer_get_iter_at_mark(cOMessageRecvBuffer, &cRIter, cRMark);
-                gtk_text_buffer_insert(cOMessageRecvBuffer, &cRIter, recvBuffer, -1);
-                g_print("%s", recvBuffer);
+                if(cRecvLength > 0)
+                    {
+                                //Thread Lock
+                            pthread_mutex_lock(&cMutex);
+                        GtkTextBuffer *cOMessageRecvBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(cOrderRecvTextView));
+                        cRMark = gtk_text_buffer_get_insert(cOMessageRecvBuffer);
+                        gtk_text_buffer_get_iter_at_mark(cOMessageRecvBuffer, &cRIter, cRMark);
+                        gtk_text_buffer_insert(cOMessageRecvBuffer, &cRIter, recvBuffer, -1);
+                        //gtk_text_view_scroll_to_mark(GTK_TEXT_VIEW(cOrderRecvTextView), cRMark, 0., FALSE, 0., 0.);
+                              //Thread Unlock.
+                            pthread_mutex_unlock(&cMutex);
+                        g_print("%s", recvBuffer);
+                    }
+                
             }
-        printf("Recv Thread will be closed\n");
+        printf("\nRecv Thread will be closed\n");
         pthread_exit(cRecvThread);
     }
 
+//Time Based Events
+
+gboolean cRecvScrollRefresh(gpointer data)
+    {
+        if(cRecv)
+            {
+                GtkTextMark *cRMark;
+                //Thread Lock
+                            pthread_mutex_lock(&cMutex);
+                        GtkTextBuffer *cOMessageRecvBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(cOrderRecvTextView));
+                        cRMark = gtk_text_buffer_get_insert(cOMessageRecvBuffer);
+                        gtk_text_view_scroll_to_mark(GTK_TEXT_VIEW(cOrderRecvTextView), cRMark, 0., FALSE, 0., 0.);
+                              //Thread Unlock.
+                            pthread_mutex_unlock(&cMutex);
+
+                return 1;
+            }
+        else
+            {
+                printf("\nAuto Scroll's Disabled\n");
+                return 0;
+            }
+    }
+
+//Key Pressed Events
+gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer data);
 
 
 
 
 //Button Events
-void cOrderSendMessage(GtkWidget *widget, gpointer data)
+gboolean cOrderSendMessage(GtkWidget *widget, gpointer data)
     {
         GtkTextIter cSFirst, cSLast;
         GtkTextBuffer *cOMessageSendBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(cOrderSendTextView));
@@ -84,6 +122,14 @@ void cOrderSendMessage(GtkWidget *widget, gpointer data)
         if(cSendMessageF(clientSocket, cSendMessage))
             {
                 perror("Send Failed");
+                cSendCheck = 0;
+                return -1;
+            }
+        else
+            {
+                gtk_text_buffer_set_text(cOMessageSendBuffer, "", 0);
+                cSendCheck = 1;
+                return 0;
             }
     }
 void cOrderWindowCloser(GtkWidget *widget, gpointer data)
@@ -94,13 +140,18 @@ void cOrderWindowCloser(GtkWidget *widget, gpointer data)
 void btConnectClick(GtkWidget *widget, gpointer data)
     {
         g_print("Connection Order\n");
-
         //Connection Call
         if(!connectToServer())
             {
                 printf("Threading's Starting\n");
                 //Multithread
                 cRecv = 1;
+                //Will be deleted--
+                send(clientSocket, "Kaan_Pardus", strlen("Kaan_Pardus"), 0);
+                sleep(0.1);
+                send(clientSocket, "mandalina", strlen("mandalina"), 0);
+                //-----------------
+                pthread_mutex_init(&cMutex, NULL);
                 pthread_t cRecvThreadID;
                 pthread_create(&cRecvThreadID, NULL, cRecvThread, NULL);
 
@@ -110,6 +161,11 @@ void btConnectClick(GtkWidget *widget, gpointer data)
                 perror("Connection Failed\n");
                 cCleaner(clientSocket);
             }
+
+        
+        //Time Based Refresh
+        g_timeout_add_seconds(1, cRecvScrollRefresh, NULL);
+
 
 
         //Chat Window Definition
@@ -128,9 +184,21 @@ void btConnectClick(GtkWidget *widget, gpointer data)
         gtk_window_set_title(GTK_WINDOW(cOrderWindow), "Tahinli's Client");
         gtk_window_set_resizable(GTK_WINDOW(cOrderWindow), FALSE);
             //TextView
-        gtk_widget_set_size_request(GTK_WIDGET(cOrderRecvScrollableWindow), 500, 300);
+        gtk_widget_set_size_request(GTK_WIDGET(cOrderRecvScrollableWindow), 500, 320);
         gtk_widget_set_size_request(GTK_WIDGET(cOrderSendScrollableWindow), 500, 100);
         gtk_text_view_set_editable(GTK_TEXT_VIEW(cOrderRecvTextView), FALSE);
+        gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(cOrderRecvTextView), FALSE);
+            //Auto Line Visual Fix
+        gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(cOrderSendTextView), GTK_WRAP_WORD);
+        gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(cOrderRecvTextView), GTK_WRAP_WORD);
+
+                //Catching Key Events in TextView
+        g_signal_connect(G_OBJECT(cOrderSendTextView), "key_press_event", G_CALLBACK(on_key_press), NULL);
+
+        
+        
+
+            
 
         //Pane Set
         gtk_fixed_put(GTK_FIXED(cOrderPane), cOrderRecvScrollableWindow, 10, 10);
@@ -218,7 +286,6 @@ int main(int argc, char **argv)
     {
         printf("Hello World\n");
 
-
         gtk_init(&argc,&argv);
         //
 
@@ -267,8 +334,6 @@ int main(int argc, char **argv)
         gtk_container_add(GTK_CONTAINER(window), pane);
         gtk_widget_show_all(window);
         gtk_main();
-
-
 
 
         return 0;
@@ -332,7 +397,7 @@ int socketCloser(int aloneSocket)
             }
         else
             {
-                printf("Socket is Closed\n");
+                printf("\nSocket is Closed\n");
                 return 0; 
             }
         
@@ -341,6 +406,7 @@ int cCleaner(int aloneSocket)
     {
         cRecv = 0;
         socketCloser(aloneSocket);
+        pthread_mutex_destroy(&cMutex);
         gtk_widget_show(cWindow);
         gtk_widget_set_sensitive(GTK_WIDGET(btConnect), TRUE);
         gtk_widget_set_sensitive(GTK_WIDGET(ipEntry), TRUE);
@@ -349,23 +415,73 @@ int cCleaner(int aloneSocket)
     }
 int cSendMessageF(int clientSocket, char cMessage[])
     {
-        char cSendBuffer[512];
-
+        
         if(strlen(cMessage)<512)
-        {   
-            strncpy(cSendBuffer, cMessage, strlen(cMessage));
-            cSendBuffer[strlen(cMessage)] = '\0';
-            cSendLength=send(clientSocket, cSendBuffer, strlen(cSendBuffer), 0);
-            if(cSendLength!=strlen(cMessage))
             {
-                perror("Send Failed");
-                return -1;
+                int isEmpyty = -1;
+                int lastLetter = -1;
+                //is Empty
+                for(int i = 0; i < strlen(cMessage); i++)
+                    {
+                        if(isEmpyty == -1 && cMessage[i] != 10 && cMessage[i] != 32 && cMessage[i] != 9)
+                            {
+                                isEmpyty = i;
+                                printf("BOŞ\n");
+                            }
+                        if(isEmpyty != -1 && cMessage[i] != 10 && cMessage[i] != 32 && cMessage[i] != 9)
+                            {
+                                lastLetter = i;
+                                printf("DEGIL\n");
+                            }
+                    }
+                if(isEmpyty != -1)
+                    {
+                        char cSendBuffer[512];
+                        for(int i = 0; i < lastLetter-isEmpyty+1; i++)
+                            {
+                                cSendBuffer[i] = cMessage[isEmpyty+i];
+                            }
+                        cSendBuffer[lastLetter+1] = '\0';
+                        for(int i = 0; i < strlen(cSendBuffer); i++)
+                            {
+                                printf("%c--%d\n", cSendBuffer[i], cSendBuffer[i]);
+                            }
+                        cSendLength=send(clientSocket, cSendBuffer, strlen(cSendBuffer), 0);
+                        if(cSendLength != strlen(cSendBuffer))
+                            {
+                                perror("Send Failed");
+                                return -1;
+                            }
+                    }
+                else
+                    {
+                        printf("\nEmpyt\n");
+                        return -1;
+                    }
             }
-           return 0; 
-        }
         else
             {
-                printf("Too Long\n");
+                printf("\nToo Long\n");
                 return -1;
             }
+        printf("\nEverything is OK\n");
+        return 0;
+
+    }
+
+
+//Key Pressed Events
+gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer data)
+    {
+        switch(event->keyval)
+            {
+                case GDK_KEY_Return:
+                cOrderSendMessage(widget, data);
+                return 1;
+                break;
+
+                default:
+                NULL;
+            }
+        return 0;
     }
