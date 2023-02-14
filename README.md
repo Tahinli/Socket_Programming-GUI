@@ -1,21 +1,19 @@
 # Socket_Programming-GUI
-socket.h&amp;gtk3-Network_GUI_Project
+Server-Client GUI Project
+EPOLL Server
+GTK 3 GUI
 
 
-
-STILL ON PROGRESS
-
-
+Most probably it has bugs and a lot to improve but I'm bored.
+Technically it's working, feel free to do anything.
 
 
----NOT RELİABLE VERSION, DO NOT TRUST
+Special Thanks to @SoftPrayog on Youtube. His video helped me to understand epoll more.
+Special Thanks to onestraw on Github. His epoll example really helped me.
 
 
+Based on many resources but here are some
 
-
----NOT OPTİMİZED, CAN CAUSE THREAD PROBLEMS
-
-
-
-
-KNOWN ISSUES = CONNECTİON DİSCONNECT AUTOMATICALLY
+www.man7.org
+www.stackoverflow.com
+docs.gtk.org/gtk3
