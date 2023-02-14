@@ -13,7 +13,7 @@ Technically it's working, feel free to do anything.
 Special Thanks to @SoftPrayog on Youtube. His video helped me to understand epoll more.
 
 
-Special Thanks to onestraw on Github. His epoll example really helped me.
+Special Thanks to "onestraw" on Github. His epoll example really helped me.
 
 
 Based on many resources but here are some
