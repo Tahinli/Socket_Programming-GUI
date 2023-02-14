@@ -19,10 +19,10 @@ Special Thanks to onestraw on Github. His epoll example really helped me.
 Based on many resources but here are some
 
 
-www.man7.org
+man7.org
 
 
-www.stackoverflow.com
+stackoverflow.com
 
 
 docs.gtk.org/gtk3
