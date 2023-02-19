@@ -1,25 +1,42 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <gtk/gtk.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/ip.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <pthread.h>
+//Libraries
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <gtk/gtk.h>
+    #include <sys/socket.h>
+    #include <netdb.h>
+    #include <sys/types.h>
+    #include <netinet/ip.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <string.h>
+    #include <unistd.h>
+    #include <errno.h>
+    #include <pthread.h>
+    #include <sys/epoll.h>
+    #include <fcntl.h>
+
 //Global Variables
-int cSendLength;
-int cRecvLength;
-int cRecv;
-int cRecvCommunicate;
-char recvBuffer[512];
-int cSendCheck = -1;
+    //Client
+        int cSendLength;
+        int cRecvLength;
+        int cRecv;
+        int cRecvCommunicate;
+        char recvBuffer[512];
+        int cSendCheck = -1;
+    //Server
+        struct sockaddr_in serverAddr;
+        struct sockaddr_in clientAddr;
+        int sClientSocket;
+        int sRecv;
+        int maxClient = 10;
+        int socketLen;
+        int messageLoop = 1;
+        int epoll_fd;
+        
 
 //Thread Values
 pthread_mutex_t cMutex;
+pthread_mutex_t sMutex;
 
 
 //Server Window Decleration
@@ -44,25 +61,27 @@ pthread_mutex_t cMutex;
         GtkWidget *cOrderSendTextView;
         GtkWidget *btcOrderMessageSend;
 //Socket Decleration
-        int clientSocket;
-        int serverSocket;
-
+    int clientSocket;
+    int serverSocket;
 //Funcs
-int connectToServer(void);
-int socketCloser(int aloneSocket);
-int cCleaner(int aloneSocket);
-int cSendMessageF(int clientSocket, char cMessage[]);
-int startServer(void);
+    int connectToServer(void);
+    int socketCloser(int aloneSocket);
+    int cCleaner(int aloneSocket);
+    int sCleaner(void);
+    int cSendMessageF(int clientSocket, char cMessage[]);
+    int startServer(void);
+    int setnonblocking(int sockfd);
 
 //Threads
 
 void *cRecvThread (void *vargp)
-    {//93.190.8.248
+    {
         
         printf("cRecvThread\n");
         GtkTextIter cRIter;
         GtkTextMark *cRMark;
         GtkAdjustment *cRHeight;
+        char cLine = '\n';
         while(cRecv)
             {
                 memset(recvBuffer, ' ', 511);
@@ -77,6 +96,7 @@ void *cRecvThread (void *vargp)
                         cRMark = gtk_text_buffer_get_insert(cOMessageRecvBuffer);
                         gtk_text_buffer_get_iter_at_mark(cOMessageRecvBuffer, &cRIter, cRMark);
                         gtk_text_buffer_insert(cOMessageRecvBuffer, &cRIter, recvBuffer, -1);
+                        //gtk_text_buffer_insert(cOMessageRecvBuffer, &cRIter, &cLine, 1);
                         //gtk_text_view_scroll_to_mark(GTK_TEXT_VIEW(cOrderRecvTextView), cRMark, 0., FALSE, 0., 0.);
                               //Thread Unlock.
                             pthread_mutex_unlock(&cMutex);
@@ -86,6 +106,116 @@ void *cRecvThread (void *vargp)
             }
         printf("\nRecv Thread will be closed\n");
         pthread_exit(cRecvThread);
+    }
+
+void *sRecvThread (void *vargp)
+    {
+        printf("\nsRecvThread\n");
+
+        char sMessage[513];
+        int sMessageCount = 0;
+        int sClientCount = 0;
+        char sClientAddr[NI_MAXHOST];
+        char sClientServ[NI_MAXSERV];
+        
+
+        epoll_fd = epoll_create1(0);
+        if(0>epoll_fd)
+            {
+                perror("Epoll Creation\n");
+            }
+
+        struct epoll_event ev[maxClient+1];
+        ev[0].events = EPOLLIN | EPOLLOUT | EPOLLET;
+        ev[0].data.fd = serverSocket;
+        sClientCount++;
+
+        if(0>epoll_ctl(epoll_fd, EPOLL_CTL_ADD, serverSocket, &ev[0]))
+            {
+                perror("Epoll_CTL\n");
+            }
+        int nfds = 0;
+        
+        while(sRecv)
+            {
+                nfds = epoll_wait(epoll_fd, ev, maxClient, 0);
+                for(int i = 0;i<nfds;i++)
+                    {
+                        if(ev[i].data.fd == serverSocket)
+                            {
+                                sClientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &socketLen);
+                                if(0>getnameinfo((struct sockaddr*)&clientAddr, socketLen, sClientAddr, sizeof(sClientAddr), sClientServ, sizeof(sClientServ), NI_NUMERICHOST | NI_NUMERICSERV))
+                                    {
+                                        perror("Getnameinfo\n");
+                                    }
+                                else
+                                    {
+                                        printf("Client Info = %s:%s\n", sClientAddr, sClientServ);
+                                        sClientCount++;
+                                    }
+                                setnonblocking(sClientSocket);
+                                ev[sClientCount].events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLHUP;
+                                ev[sClientCount].data.fd = sClientSocket;
+                                if(0>epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sClientSocket, &ev[sClientCount]))
+                                    {
+                                        perror("EPOLL_CTL-Client\n");
+                                    }
+                                else
+                                    {
+                                        printf("New Client Added\n");
+                                    }
+                            }
+                        else if (ev[i].events && EPOLLIN)
+                            {
+                                int sCompletedMessage = 1;
+                                while(sCompletedMessage)
+                                    {
+                                        bzero(sMessage, sizeof(sMessage));
+                                        sMessageCount = read(ev[i].data.fd, sMessage, sizeof(sMessage)-1);
+                                        sMessage[513] = '\0';
+                                        if(0>sMessageCount)
+                                            {
+                                                //perror("MessageCount\n");
+                                                /*printf("Closing Connection Requested\n");
+                                                epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ev[i].data.fd, NULL);
+                                                close(ev[i].data.fd);
+                                                sClientCount--;
+                                                continue;*/
+                                            }
+                                        else if(0==sMessageCount)
+                                            {
+                                                sCompletedMessage = 0;
+                                                printf("0 Closing Connection Requested\n");
+                                                epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ev[i].data.fd, NULL);
+                                                close(ev[i].data.fd);
+                                                sClientCount--;
+                                                continue;
+                                            }
+                                        else
+                                            {
+                                                printf("Message = %s\n", sMessage);
+                                                for(int j = 0;j<=sClientCount;j++)
+                                                    {
+                                                        write(ev[j].data.fd, sMessage, sizeof(sMessage));
+                                                    }
+                                                sCompletedMessage = 0;
+                                            }
+                                    }
+
+                            }
+                        else
+                            {
+                                printf("Bir Şey Oldu\n");
+                            }
+                    }
+            }
+            
+
+        if(0>close(epoll_fd))
+            {
+                perror("Epoll Close\n");
+            }        
+        printf("\nsRecv is Closing\n");
     }
 
 //Time Based Events
@@ -119,11 +249,28 @@ gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer data);
 
 
 //Button Events
+void sWindowCloser(GtkWidget *widget, gpointer data)
+    {
+        printf("\nClosing Server\n");
+        gtk_widget_destroy(GTK_WIDGET(sWindow));
+        sCleaner();
+    }
 
 void btStartClick(GtkWidget *widget, gpointer data)
     {
         g_print("\nServer Start Order\n");
-        if(startServer())
+        
+        if(!startServer())
+            {
+                printf("Threading's Starting\n");
+                //Multithread
+                sRecv = 1;
+                pthread_mutex_init(&sMutex, NULL);
+                pthread_t sRecvThreadID;
+                pthread_create(&sRecvThreadID, NULL, sRecvThread, NULL);
+                gtk_widget_set_sensitive(GTK_WIDGET(btStart), FALSE);
+            }
+        else
             {
                 perror("Server couldn't start");
             }
@@ -161,14 +308,9 @@ void btConnectClick(GtkWidget *widget, gpointer data)
         //Connection Call
         if(!connectToServer())
             {
-                printf("Threading's Starting\n");
+                printf("Client Side Threading's Starting\n");
                 //Multithread
                 cRecv = 1;
-                //Will be deleted--
-                send(clientSocket, "Kaan_Pardus", strlen("Kaan_Pardus"), 0);
-                sleep(0.1);
-                send(clientSocket, "mandalina", strlen("mandalina"), 0);
-                //-----------------
                 pthread_mutex_init(&cMutex, NULL);
                 pthread_t cRecvThreadID;
                 pthread_create(&cRecvThreadID, NULL, cRecvThread, NULL);
@@ -317,6 +459,10 @@ void btServerClick(GtkWidget *widget, gpointer data)
         //Epilogue
         gtk_container_add(GTK_CONTAINER(sWindow), sPane);
         gtk_widget_show_all(sWindow);
+
+        //CloseEvent
+        g_signal_connect(G_OBJECT(sWindow), "destroy",G_CALLBACK(sWindowCloser), NULL);
+        
     }
 
 
@@ -398,8 +544,6 @@ int connectToServer(void)
             }
         ipAddress[strlen(ipAddress)+1]='\0';
         portNumber[strlen(portNumber)+1]='\0';
-
-        //Connection Information //93.190.8.248
         struct sockaddr_in server_Socket;
         server_Socket.sin_family = AF_INET;
         server_Socket.sin_addr.s_addr = inet_aton(ipAddress, (struct in_addr*)&server_Socket.sin_addr.s_addr);
@@ -450,6 +594,13 @@ int cCleaner(int aloneSocket)
         gtk_widget_set_sensitive(GTK_WIDGET(btConnect), TRUE);
         gtk_widget_set_sensitive(GTK_WIDGET(ipEntry), TRUE);
         gtk_widget_set_sensitive(GTK_WIDGET(portEntry), TRUE);
+        return 0;
+    }
+int sCleaner(void)
+    {
+        sRecv = 0;
+        socketCloser(serverSocket);
+        socketCloser(sClientSocket);
         return 0;
     }
 int cSendMessageF(int clientSocket, char cMessage[])
@@ -513,10 +664,12 @@ int startServer(void)
         char sPortNumber[] = "00000";
         strncpy(sPortNumber, gtk_entry_get_text(GTK_ENTRY(sPortEntry)),5);
         sPortNumber[5] = '\n';
-        /*for(int i = 0; i<strlen(sPortNumber);i++)
-            {
-                printf("%c---%d\n", sPortNumber[i], sPortNumber[i]);
-            }*/
+        printf("Port is = %s\n", sPortNumber);
+        socketLen = sizeof(clientAddr);
+
+        bzero((char *)&serverAddr, sizeof(serverAddr));
+        bzero((char *)&clientAddr, sizeof(clientAddr));
+        
 
         //Socket Setup
         serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -530,6 +683,36 @@ int startServer(void)
                 return -1;
             }
         
+        
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_addr.s_addr = INADDR_ANY;
+        serverAddr.sin_port = htons(atoi(sPortNumber));
+        socklen_t serverAddr_len = sizeof(serverAddr);
+        if(0>bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(struct sockaddr_in)))
+            {
+                printf("ERRNO = %d:%s\n", errno, strerror(errno));
+                perror("Bind Failed");
+                socketCloser(serverSocket);
+                return -1;
+            }
+        setnonblocking(serverSocket);
+        if(0>listen(serverSocket, 0))
+            {
+                printf("ERRNO = %d:%s\n", errno, strerror(errno));
+                perror("Listen Failed");
+                socketCloser(serverSocket);
+                return -1;
+            }
+
+        return 0;
+    }
+
+int setnonblocking(int sockfd)
+    {
+        if(0>fcntl(sockfd, F_SETFD, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK))
+            {
+                return -1;
+            }
         return 0;
     }
 
@@ -549,3 +732,4 @@ gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer data)
             }
         return 0;
     }
+
